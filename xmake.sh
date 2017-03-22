@@ -38,7 +38,6 @@ xpack_helper_path="${parent}/xpack-helper.sh"
 
 source  "${xpack_helper_path}"
 
-
 # -----------------------------------------------------------------------------
 
 do_xmake_test_begin() {
@@ -60,6 +59,41 @@ do_xmake_test_begin() {
   done
   echo
 
+  if [ "${toolchain_name}" == "gcc-6" ]
+  then
+    cmd_prefix=""
+    cmd_suffix="-6"
+  elif [ "${toolchain_name}" == "gcc-5" ]
+  then
+    cmd_prefix=""
+    cmd_suffix="-5"
+  else
+    cmd_prefix=""
+    cmd_suffix=""
+  fi
+  set +o nounset # do not Exit if variable not set.
+  if [ -z ${c_cmd} ]
+  then
+    if [ "${toolchain_name}" == "clang" ]
+    then
+      c_cmd="${cmd_prefix}clang${cmd_suffix}"
+    else
+      c_cmd="${cmd_prefix}gcc${cmd_suffix}"
+    fi
+  fi
+  if [ -z ${cpp_cmd} ]
+  then
+    if [ "${toolchain_name}" == "clang" ]
+    then
+      cpp_cmd="${cmd_prefix}clang++${cmd_suffix}"
+    else
+      cpp_cmd="${cmd_prefix}g++${cmd_suffix}"
+    fi
+  fi
+  set -o nounset # Exit if variable not set.
+
+  echo "CC: \"${c_cmd}\""
+  echo "CXX: \"${cpp_cmd}\""
   echo "C options: \"${c_opts}\""
   echo "C++ options: \"${cpp_opts}\""
 
@@ -97,6 +131,8 @@ do_xmake_create_makefile() {
   # Note: EOF is quoted to prevent substitutions here.
   cat <<'__EOF__' | \
   sed -e "s|{{ tab }}|${tab}|g" | \
+  sed -e "s|{{ cc }}|${c_cmd}|g" | \
+  sed -e "s|{{ cxx }}|${cpp_cmd}|g" | \
   sed -e "s|{{ artifact_name }}|${artifact_name}|g" | \
   cat > "${build_folder_absolute_path}/makefile"
 ################################################################################
@@ -106,6 +142,8 @@ do_xmake_create_makefile() {
 -include ../../makefile.init
 
 RM := rm -rf
+CC := {{ cc }}
+CXX := {{ cxx }}
 
 # All of the sources participating in the build are defined here
 -include sources.mk
@@ -158,7 +196,7 @@ all: {{ artifact_name }}
 {{ tab }}@echo ' '
 {{ tab }}@echo 'Building target: $@'
 {{ tab }}@echo 'Invoking: GCC C++ Linker'
-{{ tab }}g++  -o "{{ artifact_name }}" $(OBJS) $(USER_OBJS) $(LIBS)
+{{ tab }}$(CXX)  -o "{{ artifact_name }}" $(OBJS) $(USER_OBJS) $(LIBS)
 {{ tab }}@echo 'Finished building target: $@'
 
 # Other Targets
@@ -321,14 +359,14 @@ __EOF__
 {{ tab }}@echo ' '
 {{ tab }}@echo 'Building file: $<'
 {{ tab }}@echo 'Invoking: GCC C Compiler'
-{{ tab }}gcc {{ c_opts }} -c -fmessage-length=0 {{ include_paths }} -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+{{ tab }}$(CC) {{ c_opts }} -c -fmessage-length=0 {{ include_paths }} -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 {{ tab }}@echo 'Finished building: $<'
 
 {{ folder }}/%.o: ../../{{ folder }}/%.cpp
 {{ tab }}@echo ' '
 {{ tab }}@echo 'Building file: $<'
 {{ tab }}@echo 'Invoking: GCC C++ Compiler'
-{{ tab }}g++ {{ cpp_opts }} -c -fmessage-length=0 {{ include_paths }} -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+{{ tab }}$(CXX) {{ cpp_opts }} -c -fmessage-length=0 {{ include_paths }} -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 {{ tab }}@echo 'Finished building: $<'
 
 __EOF__

@@ -60,6 +60,29 @@ do_xmake_help() {
 
 
 do_xmake_tests() {
+
+  while [ $# -gt 0 ]
+  do
+    case "$1" in
+      --toolchain)
+        shift
+        xmake_toolchain_name="$1"
+        shift
+        ;;
+
+      --target)
+        shift
+        xmake_target_name="$1"
+        shift
+        ;;
+
+      *)
+        echo "Unsupported \"$1\", abort."
+        exit 1
+        ;;
+    esac
+  done
+
   # echo do_xmake_tests $@
   for f in $(find tests -name 'test.json' -print)
   do
@@ -70,6 +93,7 @@ do_xmake_tests() {
   done
 }
 
+# xmake tests [--target <name>] [--toolchain <name>]
 do_xmake() {
   if [ $# -lt 1 ]
   then
