@@ -525,6 +525,7 @@ do_xmake_generate_subdir_scan() {
   declare -a cpp_files
 
   pushd "../../$1" >/dev/null
+  set +o nounset # do not Exit if variable not set.
   for f in *.c
   do
     # echo $f "${f%.*}"
@@ -544,6 +545,7 @@ do_xmake_generate_subdir_scan() {
       cpp_files[${#cpp_files[@]}]="${f%.*}"
     fi
   done
+  set -o nounset # Exit if variable not set.
   popd >/dev/null
   
   do_xmake_generate_subdir "$1"
