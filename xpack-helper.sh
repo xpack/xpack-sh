@@ -29,17 +29,21 @@ xmake_toolchain_name="gcc"
 
 tab=$'\t'
 
+verbose=""
+
 # -----------------------------------------------------------------------------
 # Common functions
 
 # -----------------------------------------------------------------------------
 
 do_xpm_help() {
+
   echo "Usage: xpm <command> <options>"
   echo "xpm install "
 }
 
 do_xpm() {
+
   if [ $# -lt 1 ]
   then
     do_xpm_help
@@ -53,9 +57,11 @@ do_xpm() {
 # -----------------------------------------------------------------------------
 
 do_xmake_help() {
+
   echo "Usage: xmake <command> <options>"
-  echo "xmake tests "
-  echo "xmake test <name> "
+  echo "xmake tests [--target <name>] [--toolchain <name>] ... "
+  echo "xmake test <name> [--target <name>] [--toolchain <name>] ..."
+  echo "The command must be issued in the xPack root folder."
 }
 
 
@@ -64,6 +70,11 @@ do_xmake_tests() {
   while [ $# -gt 0 ]
   do
     case "$1" in
+      --verbose)
+        shift
+        verbose="y"
+        ;;
+
       --toolchain)
         shift
         xmake_toolchain_name="$1"
@@ -76,6 +87,11 @@ do_xmake_tests() {
         shift
         ;;
 
+      --)
+        shift
+        break
+        ;;
+        
       *)
         echo "Unsupported \"$1\", abort."
         exit 1
@@ -93,8 +109,56 @@ do_xmake_tests() {
   done
 }
 
-# xmake tests [--target <name>] [--toolchain <name>]
+do_xmake_test() {
+
+  test_name="$1"
+  test_folder_path="tests/${test_name}"
+  shift
+
+  while [ $# -gt 0 ]
+  do
+    case "$1" in
+      --verbose)
+        shift
+        verbose="y"
+        ;;
+
+      --toolchain)
+        shift
+        xmake_toolchain_name="$1"
+        shift
+        ;;
+
+      --target)
+        shift
+        xmake_target_name="$1"
+        shift
+        ;;
+
+      --)
+        shift
+        break
+        ;;
+
+      *)
+        echo "Unsupported \"$1\", abort."
+        exit 1
+        ;;
+    esac
+  done
+
+  cd "${xpack_root_path}/${test_folder_path}"
+  if [ -f "test.json" ]
+  then
+    source "${xpack_root_path}/scripts/xmake-test-${test_name}.sh" $@
+  fi
+}
+
+# xmake tests [--target <name>] [--toolchain <name>] ...
+# xmake test <name> [--target <name>] [--toolchain <name>] ...
+
 do_xmake() {
+
   if [ $# -lt 1 ]
   then
     do_xmake_help
@@ -109,13 +173,11 @@ do_xmake() {
       ;;
 
     test)
-
+      shift 
+      do_xmake_test $@
       return 0
       ;;
 
-    build)
-
-      ;;
   esac
 
   echo "$@ not implemented"
@@ -129,20 +191,6 @@ do_xmake_test_begin() {
   echo "Starting test \"${test_name}\", target=\"${target_name}\", toolchain=\"${toolchain_name}\", profile \"${profile_name}\"..."
   echo
   
-  echo -n "Source folders:"
-  for f in "${src_folders[@]}"
-  do
-      echo -n " \"${f}\""
-  done
-  echo
-
-  echo -n "Include folders:"
-  for f in "${include_folders[@]}"
-  do
-      echo -n " \"${f}\""
-  done
-  echo
-
   if [ "${toolchain_name}" == "gcc-6" ]
   then
     cmd_prefix=""
@@ -176,11 +224,31 @@ do_xmake_test_begin() {
   fi
   set -o nounset # Exit if variable not set.
 
+  if [ "${verbose}" == "y" ]
+  then
+
+  echo -n "Source folders:"
+  for f in "${src_folders[@]}"
+  do
+      echo -n " \"${f}\""
+  done
+  echo
+
+  echo -n "Include folders:"
+  for f in "${include_folders[@]}"
+  do
+      echo -n " \"${f}\""
+  done
+  echo
+
   echo "CC: \"${c_cmd}\""
   echo "CXX: \"${cpp_cmd}\""
   echo "CFLAGS: \"${c_opts}\""
   echo "CXXFLAGS: \"${cpp_opts}\""
 
+  echo
+  fi
+  
   # Concatenate a list of absolute include paths.
   include_paths=""
   for f in ${include_folders[@]}
@@ -188,11 +256,13 @@ do_xmake_test_begin() {
     include_paths="${include_paths} -I\"${xpack_root_path}/${f}\""
   done
 
-  echo
   # Create the output source folders, where to generate make pieces.
   for f in ${src_folders[@]}
   do
-    echo "Creating folder \"${build_folder_path}/${f}\"..."
+    if [ "${verbose}" == "y" ]
+    then
+      echo "Creating folder \"${build_folder_path}/${f}\"..."
+    fi
     mkdir -p "${build_folder_absolute_path}/${f}"
   done
   # echo
@@ -205,15 +275,20 @@ do_xmake_test_end() {
   echo
 }
 
+# -----------------------------------------------------------------------------
+
 # ${build_folder_path}
 # ${build_folder_absolute_path}
 # ${artefact_name}
 # ${src_folders[@]}
 
-do_xmake_create_makefile() {
+do_xmake_generate_makefile() {
 
-  echo
-  echo "Generating file \"${build_folder_path}/makefile\"..."
+  if [ "${verbose}" == "y" ]
+  then
+    echo
+    echo "Generating file \"${build_folder_path}/makefile\"..."
+  fi
   # Note: EOF is quoted to prevent substitutions here.
   cat <<'__EOF__' | \
   sed -e "s|{{ tab }}|${tab}|g" | \
@@ -230,6 +305,9 @@ do_xmake_create_makefile() {
 RM := rm -rf
 CC := {{ cc }}
 CXX := {{ cxx }}
+
+# All Target
+all: {{ artefact_name }}
 
 # All of the sources participating in the build are defined here
 -include sources.mk
@@ -274,9 +352,6 @@ endif
 
 # Add inputs and outputs from these tool invocations to the build variables 
 
-# All Target
-all: {{ artefact_name }}
-
 # Tool invocations
 {{ artefact_name }}: $(OBJS) $(USER_OBJS)
 {{ tab }}@echo ' '
@@ -301,9 +376,12 @@ __EOF__
 }
 
 
-do_xmake_create_objects() {
+do_xmake_generate_objects() {
 
-  echo "Generating file \"${build_folder_path}/objects.mk\"..."
+  if [ "${verbose}" == "y" ]
+  then
+    echo "Generating file \"${build_folder_path}/objects.mk\"..."
+  fi
   # Note: EOF is quoted to prevent substitutions here.
   cat <<'__EOF__' | \
   cat > "${build_folder_absolute_path}/objects.mk"
@@ -320,9 +398,12 @@ __EOF__
 }
 
 
-do_xmake_create_sources() {
+do_xmake_generate_sources() {
 
-  echo "Generating file \"${build_folder_path}/sources.mk\"..."
+  if [ "${verbose}" == "y" ]
+  then
+    echo "Generating file \"${build_folder_path}/sources.mk\"..."
+  fi
   # Note: EOF is quoted to prevent substitutions here.
   cat <<'__EOF__' | \
   sed -e "s|{{ artefact_name }}|${artefact_name}|g" | \
@@ -366,11 +447,14 @@ __EOF__
 }
 
 # $1=relative path
-do_xmake_create_subdir() {
+do_xmake_generate_subdir() {
   
   local folder=$1
 
-  echo "Generating file \"${build_folder_path}/${folder}/subdir.mk\"..."
+  if [ "${verbose}" == "y" ]
+  then
+    echo "Generating file \"${build_folder_path}/${folder}/subdir.mk\"..."
+  fi
   # Note: EOF is quoted to prevent substitutions here.
   cat <<'__EOF__' | \
   cat > "${build_folder_absolute_path}/${folder}/subdir.mk"
@@ -384,50 +468,22 @@ __EOF__
 
   if [ ${#c_files[@]} -gt 0 ]
   then
-    echo "C_SRCS += \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
     for f in ${c_files[@]}
     do
-      echo "../../${folder}/${f}.c \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
+      echo "C_SRCS += ../../${folder}/${f}.c" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
+      echo "C_DEPS += ./${folder}/${f}.d" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
+      echo "OBJS += ./${folder}/${f}.o" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
     done
-    echo >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-
-    echo "C_DEPS += \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    for f in ${c_files[@]}
-    do
-      echo "./${folder}/${f}.d \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    done
-    echo >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-
-    echo "OBJS += \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    for f in ${c_files[@]}
-    do
-      echo "./${folder}/${f}.o \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    done
-    echo >> "${build_folder_absolute_path}/${folder}/subdir.mk"
   fi
 
   if [ ${#cpp_files[@]} -gt 0 ]
   then
-    echo "CPP_SRCS += \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
     for f in ${cpp_files[@]}
     do
-      echo "../../${folder}/${f}.cpp \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
+      echo "CPP_SRCS += ../../${folder}/${f}.cpp" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
+      echo "CPP_DEPS += ./${folder}/${f}.d" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
+      echo "OBJS += ./${folder}/${f}.o" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
     done
-    echo >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-
-    echo "CPP_DEPS += \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    for f in ${cpp_files[@]}
-    do
-      echo "./${folder}/${f}.d \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    done
-    echo >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-
-    echo "OBJS += \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    for f in ${cpp_files[@]}
-    do
-      echo "./${folder}/${f}.o \\" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
-    done
-    echo >> "${build_folder_absolute_path}/${folder}/subdir.mk"
   fi
 
   # Note: EOF is quoted to prevent substitutions here.
@@ -458,6 +514,55 @@ __EOF__
 __EOF__
 # The above marker must start in the first column.
 
+}
+
+# Scan folder for sources and call the create_subdir.
+# $1=relative path
+
+do_xmake_generate_subdir_scan() {
+
+  declare -a c_files
+  declare -a cpp_files
+
+  pushd "../../$1" >/dev/null
+  for f in *.c
+  do
+    # echo $f "${f%.*}"
+    if [ "${f%.*}" != '*' ]
+    then
+      # Append file name without extension
+      c_files[${#c_files[@]}]="${f%.*}"
+    fi
+  done
+
+  for f in *.cpp
+  do
+    # echo $f  "${f%.*}"
+    if [ "${f%.*}" != '*' ]
+    then
+      # Append file name without extension
+      cpp_files[${#cpp_files[@]}]="${f%.*}"
+    fi
+  done
+  popd >/dev/null
+  
+  do_xmake_generate_subdir "$1"
+}
+
+# -----------------------------------------------------------------------------
+
+# Chain all 
+do_xmake_generate() {
+
+    # Root make files
+  do_xmake_generate_makefile
+  do_xmake_generate_objects
+  do_xmake_generate_sources
+  
+  for f in "${src_folders[@]}"
+  do
+    do_xmake_generate_subdir_scan "${f}"
+  done
 }
 
 # -----------------------------------------------------------------------------
