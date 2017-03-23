@@ -466,6 +466,7 @@ do_xmake_generate_subdir() {
 __EOF__
 # The above marker must start in the first column.
 
+  set +o nounset # do not Exit if variable not set.
   if [ ${#c_files[@]} -gt 0 ]
   then
     for f in ${c_files[@]}
@@ -485,6 +486,7 @@ __EOF__
       echo "OBJS += ./${folder}/${f}.o" >> "${build_folder_absolute_path}/${folder}/subdir.mk"
     done
   fi
+  set -o nounset # Exit if variable not set.
 
   # Note: EOF is quoted to prevent substitutions here.
   cat <<'__EOF__' | \
