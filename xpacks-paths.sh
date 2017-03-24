@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # This file must be included with source into generate.sh, 
 # and not executed separately.
 

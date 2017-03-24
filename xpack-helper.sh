@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # -----------------------------------------------------------------------------
 # Bash helper script used to experiment with the xpm and xpack commands.
@@ -558,7 +558,7 @@ do_xmake_generate_subdir_scan() {
 # Chain all 
 do_xmake_generate() {
 
-    # Root make files
+  # Root make files
   do_xmake_generate_makefile
   do_xmake_generate_objects
   do_xmake_generate_sources
